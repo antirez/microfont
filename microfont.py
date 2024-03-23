@@ -27,7 +27,7 @@ class MicroFont:
             raise ValueError(f"{filename} is not a MicroFont file")
         self.height = height
         self.baseline = baseline
-        self.max_width = max_width,
+        self.max_width = max_width
         self.monospaced = True if monospaced else False
         self.index_len = index_len # Sparse index length on disk.
         self.cache_chars = cache_chars
@@ -81,7 +81,7 @@ class MicroFont:
         return retval
 
     @micropython.viper
-    def draw_ch_MONO_HLSB(self, fb:ptr8, fb_width:int, ch_buf:ptr8, ch_width:int, ch_height:int, dst_x:int, dst_y:int, off_x:int, color:int, sin_a:int, cos_a:int):
+    def draw_ch_MONO_HLSB(self, fb:ptr8, fb_width:int, fb_len:int, ch_buf:ptr8, ch_width:int, ch_height:int, dst_x:int, dst_y:int, off_x:int, off_y:int, color:int, sin_a:int, cos_a:int):
         for y in range(ch_height):
             for x in range(ch_width):
                 ch_byte = (ch_width>>3)*y + (x>>3)
@@ -92,9 +92,12 @@ class MicroFont:
                 # (fixed point numbers) and finally divide by 64*64 to
                 # obtain the pixel integer value.
                 for step in range(2):
-                    dx = dst_x + (((((x+off_x)<<6)+(step<<5))*cos_a - ((y<<6)+(step<<5))*sin_a + (1<<11))>>12)
-                    dy = dst_y + (((((x+off_x)<<6)+(step<<5))*sin_a + ((y<<6)+(step<<5))*cos_a + (1<<11))>>12)
+                    dx = dst_x + (((((x+off_x)<<6)+(step<<5))*cos_a - (((y+off_y)<<6)+(step<<5))*sin_a + (1<<11))>>12)
+                    dy = dst_y + (((((x+off_x)<<6)+(step<<5))*sin_a + (((y+off_y)<<6)+(step<<5))*cos_a + (1<<11))>>12)
                     fb_byte = (dy*fb_width+dx)>>3
+                    if fb_byte < 0 or fb_byte >= fb_len or \
+                       dx >= fb_width or dx < 0:
+                        continue
                     fb_bit_shift = 7-((dx)&7)
                     fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
                     fb[fb_byte] = (fb[fb_byte] & fb_bit_mask) | (color << fb_bit_shift)
@@ -113,8 +116,9 @@ class MicroFont:
     # with rotation we need to move along the rotation direction. This
     # is useful when using draw_ch() to print multiple characters of the
     # same string: we start with off_x, and increment off_x based on the
-    # width of the already printed chars.
-    def draw_ch(self, ch, fb, fb_fmt, fb_width, dst_x, dst_y, color, off_x, rot=90):
+    # width of the already printed chars. The same applies to off_y, but
+    # for vertical offsets due to multi-line text rendering.
+    def draw_ch(self, ch, fb, fb_fmt, fb_width, fb_height, dst_x, dst_y, color, off_x=0, off_y=0, rot=0):
         ch_buf = ch[0]
         ch_height = ch[1]
         # Characters horizontal bits are padded with zeros to byte boundary,
@@ -141,9 +145,31 @@ class MicroFont:
         # Call the lower level function depending on the target
         # framebuffer color mode.
         if fb_fmt == framebuf.MONO_HLSB:
-            self.draw_ch_MONO_HLSB(fb,fb_width,ch_buf,ch_width,ch_height,dst_x,dst_y,off_x,color,sin,cos)
+            fb_len = fb_width*fb_height//8
+            self.draw_ch_MONO_HLSB(fb,fb_width,fb_len,ch_buf,ch_width,ch_height,dst_x,dst_y,off_x,off_y,color,sin,cos)
         else:
             raise ValueError("Unsupported framebuffer color format")
+
+    # Render the text 'txt' in the fb of format fb_fmt of size fb_width,
+    # fb_height, starting writing at x,y (top-left corner), with the
+    # specified color (given as integer in the format of fb_fmt).
+    # By default the text is not rotated.
+    #
+    # If 'txt' contains newlines, they are handled as expected, starting
+    # a new line under the first one and back to the left. This also works
+    # correctly with rotations, so you can use this function in order to
+    # display rotated multi-line text.
+    def write(self, txt, fb, fb_fmt, fb_width, fb_height, x, y, color, *, rot=0, x_spacing=0, y_spacing=0):
+        off_x = 0
+        off_y = 0
+        for c in txt:
+            if c == '\n':
+                off_y += self.height+y_spacing
+                off_x = 0
+                continue
+            ch = self.get_ch(c)
+            self.draw_ch(ch,fb,fb_fmt,fb_width,fb_height,x,y,color,off_x,off_y,rot)
+            off_x += x_spacing + ch[2]
 
 if __name__ == "__main__":
     font = MicroFont("victor:B:12.mfnt")
