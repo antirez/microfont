@@ -1,7 +1,22 @@
-import struct, framebuf
+import struct, framebuf, math
+
+# This is a lookup table for fasth computation of sin() and cos() functions
+# of degrees from 0 to 360. At postion "A" the table stores sin(A)*64+64,
+# (with A in degrees). For values >= 180 we just invert the sign. For
+# cos, we just add 90 degrees.
+FAST_SIN_TABLE = b'@ABCDEFGHJKLMNOPQRSTUVWYZ[\\]^__`abcdefghiijklmnnopqqrsstuuvvwwxyyzzz{{|||}}}~~~~\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x80\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f~~~~}}}|||{{zzzyyxwwvvuutssrqqponnmlkjiihgfedcba`__^]\\[ZYWVUTSRQPONMLKJHGFEDCBA'
+
+def fast_sin(angle):
+    angle = int(angle) % 360
+    if angle >= 180:
+        return -(FAST_SIN_TABLE[angle%180]-64)
+    else:
+        return FAST_SIN_TABLE[angle]-64
+
+def fast_cos(angle): return fast_sin(angle+90)
 
 class MicroFont:
-    def __init__(self,filename,cache_index = False):
+    def __init__(self,filename,cache_index = False, cache_chars = False):
         stream = open(filename,"rb")
         header_data = stream.read(12)
         if len(header_data) != 12:
@@ -15,8 +30,10 @@ class MicroFont:
         self.max_width = max_width,
         self.monospaced = True if monospaced else False
         self.index_len = index_len # Sparse index length on disk.
-        self.cache_index = cache_index
+        self.cache_chars = cache_chars
+        self.cache_index = cache_index or cache_chars
         self.index = None
+        self.cache = {}
         self.stream = stream # We keep the file open for lower latecy.
 
     def height(): return self.height
@@ -39,6 +56,9 @@ class MicroFont:
             index = index[m:] if v < val else index[:m]
 
     def get_ch(self, ch):
+        if self.cache_chars and ch in self.cache:
+            return self.cache[ch]
+
         if self.index != None:
             index = self.index
         else:
@@ -56,34 +76,47 @@ class MicroFont:
         width = self.read_int_16(self.stream.read(2))
         char_data_len = (width + 7)//8 * self.height
         char_data = self.stream.read(char_data_len)
-        return char_data, self.height, width
+        retval = char_data, self.height, width
+        if self.cache_chars: self.cache[ch] = retval
+        return retval
 
     @micropython.viper
-    def draw_ch_MONO_HLSB(self, fb:ptr8, fb_width:int, ch_buf:ptr8, ch_width:int, ch_height:int, dst_x:int, dst_y:int, color:int):
+    def draw_ch_MONO_HLSB(self, fb:ptr8, fb_width:int, ch_buf:ptr8, ch_width:int, ch_height:int, dst_x:int, dst_y:int, color:int, sin_a:int, cos_a:int):
         for y in range(ch_height):
             for x in range(ch_width):
                 ch_byte = (ch_width>>3)*y + (x>>3)
                 ch_pixel = (ch_buf[ch_byte] >> (7-(x&7))) & 1
                 if ch_pixel == 0: continue
-                fb_byte = ((y+dst_y)*fb_width+dst_x+x)>>3
-                fb_bit_shift = 7-((dst_x+x)&7)
+                dx = dst_x + (((x<<6)*cos_a - (y<<6)*sin_a)>>12)
+                dy = dst_y + (((x<<6)*sin_a + (y<<6)*cos_a)>>12)
+                fb_byte = (dy*fb_width+dx)>>3
+                fb_bit_shift = 7-((dx)&7)
                 fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
                 fb[fb_byte] = (fb[fb_byte] & fb_bit_mask) | (color << fb_bit_shift)
 
     # Write a character in the destination MicroPython framebuffer 'fb'
     # setting all the pixels that are set on the font to 'color'.
+    # The character 'ch' must be obtained with the get_ch() method.
     # The 'color' must be an integer in the correct format for the specified
     # framebuffer format (fb_fmt). fb_width is the framebuffer width in
     # pixels.
-    def draw_ch(self, ch, fb, fb_fmt, fb_width, dst_x, dst_y, color):
-        ch = self.get_ch(ch) # character -> character bitmap and info.
+    def draw_ch(self, ch, fb, fb_fmt, fb_width, dst_x, dst_y, color, rot=90):
         ch_buf = ch[0]
         ch_height = ch[1]
         # Characters horizontal bits are padded with zeros to byte boundary,
         # so let's compute the actual pixels width including padding.
         ch_width = ((ch[2] + 7) // 8) * 8
+
+        # The lower-level drawing functions take the angle as integers
+        # representing the sin() and cos() value of the angle multiplyed
+        # by 64. This is needed since lower-level functions are implemented
+        # using Viper, that only allows to use integer math.
+        sin = fast_sin(rot)
+        cos = fast_cos(rot)
+        #sin = int(math.sin(rot/180*math.pi)*64)
+        #cos = int(math.cos(rot/180*math.pi)*64)
         if fb_fmt == framebuf.MONO_HLSB:
-            self.draw_ch_MONO_HLSB(fb,fb_width,ch_buf,ch_width,ch_height,dst_x,dst_y,color)
+            self.draw_ch_MONO_HLSB(fb,fb_width,ch_buf,ch_width,ch_height,dst_x,dst_y,color,sin,cos)
         else:
             raise ValueError("Unsupported framebuffer color format")
 
