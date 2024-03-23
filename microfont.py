@@ -81,14 +81,18 @@ class MicroFont:
         return retval
 
     @micropython.viper
-    def draw_ch_MONO_HLSB(self, fb:ptr8, fb_width:int, ch_buf:ptr8, ch_width:int, ch_height:int, dst_x:int, dst_y:int, color:int, sin_a:int, cos_a:int):
+    def draw_ch_MONO_HLSB(self, fb:ptr8, fb_width:int, ch_buf:ptr8, ch_width:int, ch_height:int, dst_x:int, dst_y:int, off_x:int, color:int, sin_a:int, cos_a:int):
         for y in range(ch_height):
             for x in range(ch_width):
                 ch_byte = (ch_width>>3)*y + (x>>3)
                 ch_pixel = (ch_buf[ch_byte] >> (7-(x&7))) & 1
                 if ch_pixel == 0: continue
-                dx = dst_x + (((x<<6)*cos_a - (y<<6)*sin_a + (1<<11))>>12)
-                dy = dst_y + (((x<<6)*sin_a + (y<<6)*cos_a + (1<<11))>>12)
+                # Floating point math is very slow in common MCUs, so
+                # we execute all the computation by multiplying by 64
+                # (fixed point numbers) and finally divide by 64*64 to
+                # obtain the pixel integer value.
+                dx = dst_x + ((((x+off_x)<<6)*cos_a - (y<<6)*sin_a + (1<<11))>>12)
+                dy = dst_y + ((((x+off_x)<<6)*sin_a + (y<<6)*cos_a + (1<<11))>>12)
                 fb_byte = (dy*fb_width+dx)>>3
                 fb_bit_shift = 7-((dx)&7)
                 fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
@@ -100,7 +104,16 @@ class MicroFont:
     # The 'color' must be an integer in the correct format for the specified
     # framebuffer format (fb_fmt). fb_width is the framebuffer width in
     # pixels.
-    def draw_ch(self, ch, fb, fb_fmt, fb_width, dst_x, dst_y, color, rot=90):
+    #
+    # The character is printed at dst_x, dst_y (top-left corner of the
+    # character), however if off_x is specified, the character is printed
+    # at the right of the specified position by off_x pixels. This is
+    # different than just adding the same amount of pixels to dst_x, since
+    # with rotation we need to move along the rotation direction. This
+    # is useful when using draw_ch() to print multiple characters of the
+    # same string: we start with off_x, and increment off_x based on the
+    # width of the already printed chars.
+    def draw_ch(self, ch, fb, fb_fmt, fb_width, dst_x, dst_y, color, off_x, rot=90):
         ch_buf = ch[0]
         ch_height = ch[1]
         # Characters horizontal bits are padded with zeros to byte boundary,
@@ -127,7 +140,7 @@ class MicroFont:
         # Call the lower level function depending on the target
         # framebuffer color mode.
         if fb_fmt == framebuf.MONO_HLSB:
-            self.draw_ch_MONO_HLSB(fb,fb_width,ch_buf,ch_width,ch_height,dst_x,dst_y,color,sin,cos)
+            self.draw_ch_MONO_HLSB(fb,fb_width,ch_buf,ch_width,ch_height,dst_x,dst_y,off_x,color,sin,cos)
         else:
             raise ValueError("Unsupported framebuffer color format")
 
