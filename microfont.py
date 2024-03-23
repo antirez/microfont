@@ -1,4 +1,4 @@
-import struct
+import struct, framebuf
 
 class MicroFont:
     def __init__(self,filename,cache_index = False):
@@ -58,6 +58,37 @@ class MicroFont:
         char_data = self.stream.read(char_data_len)
         return char_data, self.height, width
 
+    @micropython.viper
+    def draw_ch_MONO_HLSB(self, fb:ptr8, fb_width:int, ch_buf:ptr8, ch_width:int, ch_height:int, dst_x:int, dst_y:int, color:int):
+        for y in range(ch_height):
+            for x in range(ch_width):
+                ch_byte = (ch_width>>3)*y + (x>>3)
+                ch_pixel = (ch_buf[ch_byte] >> (7-(x&7))) & 1
+                if ch_pixel == 0: continue
+                fb_byte = ((y+dst_y)*fb_width+dst_x+x)>>3
+                fb_bit_shift = 7-((dst_x+x)&7)
+                fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
+                fb[fb_byte] = (fb[fb_byte] & fb_bit_mask) | (color << fb_bit_shift)
+
+    # Write a character in the destination MicroPython framebuffer 'fb'
+    # setting all the pixels that are set on the font to 'color'.
+    # The 'color' must be an integer in the correct format for the specified
+    # framebuffer format (fb_fmt). fb_width is the framebuffer width in
+    # pixels.
+    def draw_ch(self, ch, fb, fb_fmt, fb_width, dst_x, dst_y, color):
+        ch = self.get_ch(ch) # character -> character bitmap and info.
+        ch_buf = ch[0]
+        ch_height = ch[1]
+        # Characters horizontal bits are padded with zeros to byte boundary,
+        # so let's compute the actual pixels width including padding.
+        ch_width = ((ch[2] + 7) // 8) * 8
+        if fb_fmt == framebuf.MONO_HLSB:
+            self.draw_ch_MONO_HLSB(fb,fb_width,ch_buf,ch_width,ch_height,dst_x,dst_y,color)
+        else:
+            raise ValueError("Unsupported framebuffer color format")
+
 if __name__ == "__main__":
     font = MicroFont("victor:B:12.mfnt")
-    print(font.get_ch("a"))
+    data,height,width = font.get_ch("Q")
+    for i in range(height):
+        print(bin(data[i]|1024))
