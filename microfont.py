@@ -54,7 +54,7 @@ class MicroFont:
         # Access the char data inside the file.
         self.stream.seek(12+self.index_len+doff) # 12 is header len.
         width = self.read_int_16(self.stream.read(2))
-        char_data_len = ((width - 1)//8 + 1) * self.height
+        char_data_len = (width + 7)//8 * self.height
         char_data = self.stream.read(char_data_len)
         return char_data, self.height, width
 
