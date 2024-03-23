@@ -87,8 +87,8 @@ class MicroFont:
                 ch_byte = (ch_width>>3)*y + (x>>3)
                 ch_pixel = (ch_buf[ch_byte] >> (7-(x&7))) & 1
                 if ch_pixel == 0: continue
-                dx = dst_x + (((x<<6)*cos_a - (y<<6)*sin_a)>>12)
-                dy = dst_y + (((x<<6)*sin_a + (y<<6)*cos_a)>>12)
+                dx = dst_x + (((x<<6)*cos_a - (y<<6)*sin_a + (1<<11))>>12)
+                dy = dst_y + (((x<<6)*sin_a + (y<<6)*cos_a + (1<<11))>>12)
                 fb_byte = (dy*fb_width+dx)>>3
                 fb_bit_shift = 7-((dx)&7)
                 fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
@@ -111,10 +111,21 @@ class MicroFont:
         # representing the sin() and cos() value of the angle multiplyed
         # by 64. This is needed since lower-level functions are implemented
         # using Viper, that only allows to use integer math.
-        sin = fast_sin(rot)
-        cos = fast_cos(rot)
-        #sin = int(math.sin(rot/180*math.pi)*64)
-        #cos = int(math.cos(rot/180*math.pi)*64)
+        # We have a fast-path for obvious rotations (it makes a difference).
+        if rot == 0:
+            sin = 0; cos = 64
+        elif rot == 90:
+            sin = 64; cos = 0
+        elif rot == 180:
+            sin = 0; cos = -64
+        elif rot == 270:
+            sin = -64; cos = 0
+        else:
+            sin = fast_sin(rot)
+            cos = fast_cos(rot)
+
+        # Call the lower level function depending on the target
+        # framebuffer color mode.
         if fb_fmt == framebuf.MONO_HLSB:
             self.draw_ch_MONO_HLSB(fb,fb_width,ch_buf,ch_width,ch_height,dst_x,dst_y,color,sin,cos)
         else:
