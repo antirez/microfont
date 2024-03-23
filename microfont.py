@@ -91,12 +91,13 @@ class MicroFont:
                 # we execute all the computation by multiplying by 64
                 # (fixed point numbers) and finally divide by 64*64 to
                 # obtain the pixel integer value.
-                dx = dst_x + ((((x+off_x)<<6)*cos_a - (y<<6)*sin_a + (1<<11))>>12)
-                dy = dst_y + ((((x+off_x)<<6)*sin_a + (y<<6)*cos_a + (1<<11))>>12)
-                fb_byte = (dy*fb_width+dx)>>3
-                fb_bit_shift = 7-((dx)&7)
-                fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
-                fb[fb_byte] = (fb[fb_byte] & fb_bit_mask) | (color << fb_bit_shift)
+                for step in range(2):
+                    dx = dst_x + (((((x+off_x)<<6)+(step<<5))*cos_a - ((y<<6)+(step<<5))*sin_a + (1<<11))>>12)
+                    dy = dst_y + (((((x+off_x)<<6)+(step<<5))*sin_a + ((y<<6)+(step<<5))*cos_a + (1<<11))>>12)
+                    fb_byte = (dy*fb_width+dx)>>3
+                    fb_bit_shift = 7-((dx)&7)
+                    fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
+                    fb[fb_byte] = (fb[fb_byte] & fb_bit_mask) | (color << fb_bit_shift)
 
     # Write a character in the destination MicroPython framebuffer 'fb'
     # setting all the pixels that are set on the font to 'color'.
