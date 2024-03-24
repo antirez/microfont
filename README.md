@@ -4,14 +4,14 @@ Compared to the original code, I made this changes:
 
 * Fonts are not loaded in memory but stored on disk, in MicroFont format 'MFNT' files. They use the same sparse index and data section as the original library, plus some header information that I added in order to make them able to work from flash, without loading fonts data in memory.
 * Optionally, it is possible to cache in memory just the sparse index, or alternatively the index and every character used. This is useful when faster performances are needed.
-* The rendering code is written from scratch, and allows blitting text in a MicroPython framebuffer without using the framebuffer primitives (in order to implement things otherwise not possible). It supports fast rotated test rendering by any angle from 0 to 360 degrees, and is written using the Viper native code emitter.
+* The rendering code is written from scratch, and allows blitting text in a MicroPython framebuffer without using the framebuffer primitives (in order to implement things otherwise not possible). It supports fast rotated text rendering by any angle from 0 to 360 degrees, and is written using the Viper native code emitter.
 * Only horizontally mapped fonts are supported, the original library allowed for vertically mapped fonts. By implementing the blitting support for vertical mapped framebuffers (TODO), this will not be a problem, even for hardware displays that are vertically mapped (they are rare AFAIK).
 
 ![MicroFont library demo](images/microfont.jpg)
 
-So with the code you found in this repository you can:
+So with the code you find in this repository you can:
 
-1. Convert TTF/OTF font to MicroFont files.
+1. Convert TTF/OTF fonts to MicroFont files.
 2. Upload such files on your device flash.
 3. Use the `microfont.py` MicroPython library to load fonts and render text on the framebuffer.
 
@@ -57,9 +57,9 @@ Here is an example of rendering speed in a Raspberry Pico 2040 with the three di
 * Index caching: 9.48 milliseconds.
 * Index and chars caching: 5.89 milliseconds
 
-For most use cases, just index caching or no caching seems the best bet, rendering is anyway fast enough for many kind of applications.
+For most use cases, just index caching or no caching seems the best bet, rendering is anyway fast enough for many kinds of applications.
 
-Take in mind that larger fonts take more rendering time than smaller fonts.
+Take in mind that larger fonts take more rendering time than smaller fonts, and also more memory if character caching is used, since they are bitmap representations. Instead, the memory used by indexes only depends on the number of characters mapped, not their size.
 
 ## Fonts included in this repository
 
