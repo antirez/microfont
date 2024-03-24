@@ -7,6 +7,8 @@ Compared to the original code, I made this changes:
 * The rendering code is written from scratch, and allows blitting text in a MicroPython framebuffer without using the framebuffer primitives (in order to implement things otherwise not possible). It supports fast rotated test rendering by any angle from 0 to 360 degrees, and is written using the Viper native code emitter.
 * Only horizontally mapped fonts are supported, the original library allowed for vertically mapped fonts. By implementing the blitting support for vertical mapped framebuffers (TODO), this will not be a problem, even for hardware displays that are vertically mapped (they are rare AFAIK).
 
+![MicroFont library demo](images/microfont.jpg)
+
 So with the code you found in this repository you can:
 
 1. Convert TTF/OTF font to MicroFont files.
