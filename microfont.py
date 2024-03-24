@@ -6,6 +6,9 @@ import struct, framebuf, math
 # cos, we just add 90 degrees.
 FAST_SIN_TABLE = b'@ABCDEFGHJKLMNOPQRSTUVWYZ[\\]^__`abcdefghiijklmnnopqqrsstuuvvwwxyyzzz{{|||}}}~~~~\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x80\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f\x7f~~~~}}}|||{{zzzyyxwwvvuutssrqqponnmlkjiihgfedcba`__^]\\[ZYWVUTSRQPONMLKJHGFEDCBA'
 
+COLORMODE_MONO_HLSB = const(0)
+COLORMODE_RGB_565 = const(1)
+
 def fast_sin(angle):
     angle = int(angle) % 360
     if angle >= 180:
@@ -80,8 +83,11 @@ class MicroFont:
         if self.cache_chars: self.cache[ch] = retval
         return retval
 
+    # Lowlevel framebuffer function. That's the core of the library, as handles
+    # the actual drawing of the character to the target framebuffer memory
+    # with rotation, oversampling and so forth.
     @micropython.viper
-    def draw_ch_MONO_HLSB(self, fb:ptr8, fb_width:int, fb_len:int, ch_buf:ptr8, ch_width:int, ch_height:int, dst_x:int, dst_y:int, off_x:int, off_y:int, color:int, sin_a:int, cos_a:int):
+    def draw_ch_blit(self, fb:ptr8, fb_width:int, fb_len:int, ch_buf:ptr8, ch_width:int, ch_height:int, dst_x:int, dst_y:int, off_x:int, off_y:int, color:int, sin_a:int, cos_a:int, colormode:int):
         for y in range(ch_height):
             for x in range(ch_width):
                 ch_byte = (ch_width>>3)*y + (x>>3)
@@ -91,16 +97,30 @@ class MicroFont:
                 # we execute all the computation by multiplying by 64
                 # (fixed point numbers) and finally divide by 64*64 to
                 # obtain the pixel integer value.
+                #
+                # Step is used for oversampling, otherwise when the text
+                # is rotated there will be empty pixels. We just oversample
+                # in the diagonal, since that's enough to fill the gaps.
                 for step in range(2):
-                    dx = dst_x + (((((x+off_x)<<6)+(step<<5))*cos_a - (((y+off_y)<<6)+(step<<5))*sin_a + (1<<11))>>12)
-                    dy = dst_y + (((((x+off_x)<<6)+(step<<5))*sin_a + (((y+off_y)<<6)+(step<<5))*cos_a + (1<<11))>>12)
-                    fb_byte = (dy*fb_width+dx)>>3
-                    if fb_byte < 0 or fb_byte >= fb_len or \
-                       dx >= fb_width or dx < 0:
-                        continue
-                    fb_bit_shift = 7-((dx)&7)
-                    fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
-                    fb[fb_byte] = (fb[fb_byte] & fb_bit_mask) | (color << fb_bit_shift)
+                    s = (step<<4)+(step<<3)
+                    dx = dst_x + (((((x+off_x)<<6)+s)*cos_a - (((y+off_y)<<6)+s)*sin_a + (1<<11))>>12)
+                    dy = dst_y + (((((x+off_x)<<6)+s)*sin_a + (((y+off_y)<<6)+s)*cos_a + (1<<11))>>12)
+                    if colormode == COLORMODE_MONO_HLSB:
+                        fb_byte = (dy*fb_width+dx)>>3
+                        if fb_byte < 0 or fb_byte >= fb_len or \
+                           dx >= fb_width or dx < 0:
+                            continue
+                        fb_bit_shift = 7-((dx)&7)
+                        fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
+                        fb[fb_byte] = (fb[fb_byte] & fb_bit_mask) | \
+                                      (color << fb_bit_shift)
+                    elif colormode == COLORMODE_RGB_565:
+                        fb_word = (dy*fb_width+dx)
+                        if fb_word < 0 or fb_word >= (fb_len>>1) or \
+                           dx >= fb_width or dx < 0:
+                            continue
+                        fb16 = ptr16(fb)
+                        fb16[fb_word] = color
 
     # Write a character in the destination MicroPython framebuffer 'fb'
     # setting all the pixels that are set on the font to 'color'.
@@ -146,7 +166,10 @@ class MicroFont:
         # framebuffer color mode.
         if fb_fmt == framebuf.MONO_HLSB:
             fb_len = fb_width*fb_height//8
-            self.draw_ch_MONO_HLSB(fb,fb_width,fb_len,ch_buf,ch_width,ch_height,dst_x,dst_y,off_x,off_y,color,sin,cos)
+            self.draw_ch_blit(fb,fb_width,fb_len,ch_buf,ch_width,ch_height,dst_x,dst_y,off_x,off_y,color,sin,cos,COLORMODE_MONO_HLSB)
+        elif fb_fmt == framebuf.RGB565:
+            fb_len = fb_width*fb_height*2
+            self.draw_ch_blit(fb,fb_width,fb_len,ch_buf,ch_width,ch_height,dst_x,dst_y,off_x,off_y,color,sin,cos,COLORMODE_RGB_565)
         else:
             raise ValueError("Unsupported framebuffer color format")
 
