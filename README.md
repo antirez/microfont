@@ -27,11 +27,13 @@ The font generated will have all the characters specified inside teh `charset.tx
 
 ## Usage
 
-    font = MicroFont("victor:B:18.mfnt",cache_index=True)
-    fb = ... some MicroPython framebuffer
-    color = 1 # Color must be in the framebuffer color mode format.
-    angle = 90
-    font.write("Some text", fb, framebuf.MONO_HLSB, fb_width, fb_height, x, y, color, rot=angle, x_spacing=0, y_spacing=0)
+```python
+font = MicroFont("victor:B:18.mfnt",cache_index=True)
+fb = ... some MicroPython framebuffer
+color = 1 # Color must be in the framebuffer color mode format.
+angle = 90
+font.write("Some text", fb, framebuf.MONO_HLSB, fb_width, fb_height, x, y, color, rot=angle, x_spacing=0, y_spacing=0)
+```
 
 Unfortunately the MicroPython framebuffer lacks methods to query its width, height, color format and other attributes. So you will have to pass them as arguments to the write() method, as in the example above.
 
