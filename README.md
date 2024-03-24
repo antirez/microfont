@@ -23,7 +23,7 @@ In order to use your own fonts, you need to convert TTF (or OTF) fonts using the
 
     python3 font_to_microfont.py -k charset.txt myfont_regular.ttf 18 victor:R:18.mfnt
 
-The font generated will have all the characters specified inside teh `charset.txt` file, so make sure that it contains what you need, but not more than you need in order to avoid wasting space on the flash.
+The font generated will have all the characters specified inside the `charset.txt` file, so make sure that it contains what you need, but not more than you need in order to avoid wasting space on the flash.
 
 ## Usage
 
