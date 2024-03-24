@@ -45,6 +45,15 @@ Please note that:
 * Newlines inside the string to render will create new lines of text like if it was a terminal. Like in `write("One line\nAnother line", ...)`.
 * with `x_spacing` and `y_spacing` you can control the space among characters and lines.
 
+These additional methods are also available, in order to retrieve generic fonts information:
+
+```python
+def height(): return self.height
+def baseline(): return self.baseline
+def max_width(): return self.max_width
+def monospaced(): return self.monospaced
+```
+
 ## Caching
 
 You can cache chars or both chars an indexes by passing `cache_index` or also `cache_chars` arguments set to `True` during initialization. When character caching is enabled, index caching is automatically enabled regardless of what you provide.

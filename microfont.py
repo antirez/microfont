@@ -58,10 +58,13 @@ class MicroFont:
                 return 0
             index = index[m:] if v < val else index[:m]
 
+    # Return the character bitmap (horizontally mapped, and horizontally
+    # padded to whole bytes), the height and width in pixels.
     def get_ch(self, ch):
         if self.cache_chars and ch in self.cache:
             return self.cache[ch]
 
+        # Read the index in memory, if not cached.
         if self.index != None:
             index = self.index
         else:
@@ -74,7 +77,7 @@ class MicroFont:
         # real offset from the start is hdr_len + index_len + doff.
         doff = self.bs(memoryview(index), ord(ch)) << 3
 
-        # Access the char data inside the file.
+        # Access the char data inside the file and return it.
         self.stream.seek(12+self.index_len+doff) # 12 is header len.
         width = self.read_int_16(self.stream.read(2))
         char_data_len = (width + 7)//8 * self.height
