@@ -8,6 +8,7 @@ FAST_SIN_TABLE = b'@ABCDEFGHJKLMNOPQRSTUVWYZ[\\]^__`abcdefghiijklmnnopqqrsstuuvv
 
 COLORMODE_MONO_HLSB = const(0)
 COLORMODE_RGB_565 = const(1)
+COLORMODE_MONO_VLSB = const(2)
 
 def fast_sin(angle):
     angle = int(angle) % 360
@@ -117,6 +118,15 @@ class MicroFont:
                         fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
                         fb[fb_byte] = (fb[fb_byte] & fb_bit_mask) | \
                                       (color << fb_bit_shift)
+                    elif colormode == COLORMODE_MONO_VLSB:
+                        fb_byte = (dy>>3)*fb_width+dx
+                        if fb_byte < 0 or fb_byte >= fb_len or \
+                           dy >= fb_width or dy < 0:
+                            continue
+                        fb_bit_shift = ((dy)&7)
+                        fb_bit_mask = 0xff ^ (1<<fb_bit_shift)
+                        fb[fb_byte] = (fb[fb_byte] & fb_bit_mask) | \
+                                      (color << fb_bit_shift)
                     elif colormode == COLORMODE_RGB_565:
                         fb_word = (dy*fb_width+dx)
                         if fb_word < 0 or fb_word >= (fb_len>>1) or \
@@ -170,6 +180,9 @@ class MicroFont:
         if fb_fmt == framebuf.MONO_HLSB:
             fb_len = fb_width*fb_height//8
             self.draw_ch_blit(fb,fb_width,fb_len,ch_buf,ch_width,ch_height,dst_x,dst_y,off_x,off_y,color,sin,cos,COLORMODE_MONO_HLSB)
+        elif fb_fmt == framebuf.MONO_VLSB:
+            fb_len = fb_width*fb_height//8
+            self.draw_ch_blit(fb,fb_width,fb_len,ch_buf,ch_width,ch_height,dst_x,dst_y,off_x,off_y,color,sin,cos,COLORMODE_MONO_VLSB)
         elif fb_fmt == framebuf.RGB565:
             fb_len = fb_width*fb_height*2
             self.draw_ch_blit(fb,fb_width,fb_len,ch_buf,ch_width,ch_height,dst_x,dst_y,off_x,off_y,color,sin,cos,COLORMODE_RGB_565)
